@@ -14,12 +14,16 @@ import { db } from '../lib/firebase'
 import { useAuth } from '../lib/useAuth'
 import { VinylRecord, Grade } from '../types'
 import { searchDiscogs, DiscogsResult } from '../lib/discogs'
+import VinylArt from '../components/VinylArt'
+import { GRADE_COLORS } from '../lib/grades'
+import { useLang } from '../lib/i18n'
 
 const GRADES: Grade[] = ['M', 'NM', 'VG+', 'VG', 'G', 'F']
 const PLACEHOLDER_COLORS = ['#A63D2F', '#1F4B43', '#C9A227', '#2B3A55']
 
 export default function Collection() {
   const { user } = useAuth()
+  const { t } = useLang()
   const [records, setRecords] = useState<VinylRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
@@ -64,15 +68,15 @@ export default function Collection() {
       <div className="flex items-end justify-between mb-8 flex-wrap gap-4">
         <div>
           <p className="font-mono text-xs text-mustard tracking-widest mb-1">
-            {records.length} תקליטים
+            {t.records(records.length)}
           </p>
-          <h2 className="font-display text-4xl">האוסף שלי</h2>
+          <h2 className="font-display text-4xl">{t.myCollection}</h2>
         </div>
         <button
           onClick={() => setShowAdd(true)}
           className="font-mono text-xs tracking-widest uppercase border border-paper-light/30 rounded-sm px-4 py-2 hover:border-mustard hover:text-mustard transition-colors"
         >
-          + הוסף תקליט
+          {t.addRecord}
         </button>
       </div>
 
@@ -115,45 +119,53 @@ function RecordCard({
   onDelete: (id: string) => void
 }) {
   return (
-    <div className="bg-paper text-ink rounded-sm shadow-lg p-4 flex flex-col justify-between aspect-square">
-      <div>
+    <div className="rounded-sm overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.5)] hover:-translate-y-1 transition-all duration-200 bg-paper text-ink">
+      <VinylArt color={record.coverColor} />
+      <div className="p-4">
         <p className="font-mono text-[10px] tracking-widest text-ink/50 mb-1">
           {record.catalogNo} · {record.year}
         </p>
-        <h3 className="font-display text-xl leading-tight uppercase">{record.title}</h3>
-        <p className="font-body text-sm text-ink/70 mt-1">{record.artist}</p>
-        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-          <span className="font-mono text-[10px] uppercase px-2 py-0.5 rounded bg-teal/20 text-teal">
+        <h3 className="font-display text-lg leading-tight uppercase">{record.title}</h3>
+        <p className="font-body text-sm text-ink/70 mt-0.5">{record.artist}</p>
+
+        <div className="flex items-center gap-1.5 mt-3 flex-wrap">
+          <span className="font-mono text-[10px] uppercase px-2 py-1 rounded bg-teal/20 text-teal">
             {record.genre}
           </span>
-          <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-ink/10 text-ink/70">
+          <span
+            className="font-mono text-[10px] px-2 py-1 rounded"
+            style={{
+              background: `${GRADE_COLORS[record.grade]}22`,
+              color: GRADE_COLORS[record.grade],
+            }}
+          >
             {record.grade}
           </span>
         </div>
-      </div>
 
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1 border border-ink/20 rounded overflow-hidden">
+        <div className="flex items-center justify-between mt-3">
+          <div className="flex items-center gap-1 border border-ink/20 rounded overflow-hidden">
+            <button
+              onClick={() => onChangeQuantity(record.id, record.quantity - 1)}
+              className="w-6 h-6 text-sm hover:bg-black/5"
+            >
+              −
+            </button>
+            <span className="font-mono text-xs w-5 text-center">{record.quantity}</span>
+            <button
+              onClick={() => onChangeQuantity(record.id, record.quantity + 1)}
+              className="w-6 h-6 text-sm hover:bg-black/5"
+            >
+              +
+            </button>
+          </div>
           <button
-            onClick={() => onChangeQuantity(record.id, record.quantity - 1)}
-            className="w-6 h-6 text-sm hover:bg-black/5"
+            onClick={() => onDelete(record.id)}
+            className="font-mono text-[10px] uppercase text-rust hover:underline"
           >
-            −
-          </button>
-          <span className="font-mono text-xs w-5 text-center">{record.quantity}</span>
-          <button
-            onClick={() => onChangeQuantity(record.id, record.quantity + 1)}
-            className="w-6 h-6 text-sm hover:bg-black/5"
-          >
-            +
+            מחיקה
           </button>
         </div>
-        <button
-          onClick={() => onDelete(record.id)}
-          className="font-mono text-[10px] uppercase text-rust hover:underline"
-        >
-          מחיקה
-        </button>
       </div>
     </div>
   )

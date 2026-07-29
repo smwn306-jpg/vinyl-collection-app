@@ -2,6 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { signOut } from 'firebase/auth'
 import { auth } from '../lib/firebase'
 import { useAuth } from '../lib/useAuth'
+import { useLang } from '../lib/i18n'
 
 const navItem =
   'font-mono text-xs tracking-widest uppercase px-3 py-2 border-b-2 transition-colors'
@@ -9,6 +10,7 @@ const navItem =
 export default function Header() {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { lang, t, toggle } = useLang()
 
   const handleLogout = async () => {
     await signOut(auth)
@@ -21,9 +23,10 @@ export default function Header() {
         <div>
           <h1 className="font-display text-3xl tracking-wide">CRATE</h1>
           <p className="font-mono text-[10px] text-paper-light/40 tracking-widest">
-            {user?.displayName || 'האוסף שלך'}
+            {user?.displayName || t.tagline}
           </p>
         </div>
+
         <nav className="flex items-center gap-1">
           <NavLink
             to="/"
@@ -32,7 +35,7 @@ export default function Header() {
               `${navItem} ${isActive ? 'border-mustard text-mustard' : 'border-transparent text-paper-light/60 hover:text-paper-light'}`
             }
           >
-            אוסף
+            {t.tabCollection}
           </NavLink>
           <NavLink
             to="/want-list"
@@ -40,15 +43,36 @@ export default function Header() {
               `${navItem} ${isActive ? 'border-mustard text-mustard' : 'border-transparent text-paper-light/60 hover:text-paper-light'}`
             }
           >
-            חוסרים
+            {t.tabWantlist}
           </NavLink>
+        </nav>
+
+        <div className="flex items-center gap-3">
+          <div className="flex rounded-full overflow-hidden border border-paper-light/20">
+            <button
+              onClick={() => lang !== 'he' && toggle()}
+              className={`font-mono text-[10px] tracking-widest px-2.5 py-1.5 transition-colors ${
+                lang === 'he' ? 'bg-mustard text-ink' : 'text-paper-light/60'
+              }`}
+            >
+              עברית
+            </button>
+            <button
+              onClick={() => lang !== 'en' && toggle()}
+              className={`font-mono text-[10px] tracking-widest px-2.5 py-1.5 transition-colors ${
+                lang === 'en' ? 'bg-mustard text-ink' : 'text-paper-light/60'
+              }`}
+            >
+              EN
+            </button>
+          </div>
           <button
             onClick={handleLogout}
-            className={`${navItem} border-transparent text-paper-light/60 hover:text-rust`}
+            className="font-mono text-xs tracking-widest uppercase text-paper-light/60 hover:text-rust transition-colors"
           >
-            התנתקות
+            {t.logout}
           </button>
-        </nav>
+        </div>
       </div>
     </header>
   )

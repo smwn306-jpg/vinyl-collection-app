@@ -14,11 +14,13 @@ import { db } from '../lib/firebase'
 import { useAuth } from '../lib/useAuth'
 import { WantListItem } from '../types'
 import GhostSleeveCard from '../components/GhostSleeveCard'
+import { useLang } from '../lib/i18n'
 
 const PLACEHOLDER_COLORS = ['#A63D2F', '#1F4B43', '#C9A227', '#2B3A55']
 
 export default function WantList() {
   const { user } = useAuth()
+  const { t } = useLang()
   const [items, setItems] = useState<WantListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
@@ -72,14 +74,14 @@ export default function WantList() {
     <div>
       <div className="flex items-end justify-between mb-8 flex-wrap gap-4">
         <div>
-          <p className="font-mono text-xs text-rust tracking-widest mb-1">{items.length} חוסרים</p>
-          <h2 className="font-display text-4xl">להשלמת האוסף</h2>
+          <p className="font-mono text-xs text-rust tracking-widest mb-1">{t.missing(items.length)}</p>
+          <h2 className="font-display text-4xl">{t.completeCollection}</h2>
         </div>
         <button
           onClick={() => setShowAdd(true)}
           className="font-mono text-xs tracking-widest uppercase border border-paper-light/30 rounded-sm px-4 py-2 hover:border-mustard hover:text-mustard transition-colors"
         >
-          + הוסף לרשימה
+          {t.addToWantlist}
         </button>
       </div>
 

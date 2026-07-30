@@ -4,7 +4,6 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "wrangler dev",
-    "build": "wrangler deploy --dry-run",
     "deploy": "wrangler deploy",
     "secrets": "echo 'Run: wrangler secret put DISCOGS_KEY   (then repeat for DISCOGS_SECRET)'"
   },

@@ -5,7 +5,7 @@ compatibility_date = "2024-09-01"
 # עדכני לכתובת האמיתית של האתר שלך אחרי שהוא עולה על Cloudflare Pages,
 # אחרת כל אתר בעולם יוכל להשתמש ב-Worker שלך (ולצרוך את מכסת ה-cache/requests שלך).
 [vars]
-ALLOWED_ORIGIN = "http://vinyl-collection-app.pages.dev/"
+ALLOWED_ORIGIN = "http://vinyl-collection-app.pages.dev"
 
 # הסודות (מפתחות Discogs) לא נכנסים לקובץ הזה בכלל.
 # מגדירים אותם דרך פקודת ה-CLI:

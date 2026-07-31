@@ -6,6 +6,7 @@ import {
   updateDoc,
   deleteDoc,
   doc,
+  setDoc,
   query,
   orderBy,
   serverTimestamp,
@@ -17,6 +18,7 @@ import { searchDiscogs, DiscogsResult } from '../lib/discogs'
 import VinylArt from '../components/VinylArt'
 import { GRADE_COLORS } from '../lib/grades'
 import { useLang } from '../lib/i18n'
+import { downloadCsv } from '../lib/csv'
 
 const GRADES: Grade[] = ['M', 'NM', 'VG+', 'VG', 'G', 'F']
 const PLACEHOLDER_COLORS = ['#A63D2F', '#1F4B43', '#C9A227', '#2B3A55']
@@ -63,6 +65,32 @@ export default function Collection() {
     await deleteDoc(doc(db, 'users', user.uid, 'collection', id))
   }
 
+  const exportCsv = () => {
+    downloadCsv(
+      'crate-collection.csv',
+      ['Artist', 'Album', 'Year', 'Genre', 'Catalog Number', 'Discogs ID', 'Condition', 'Quantity'],
+      records.map((r) => [r.artist, r.title, r.year || '', r.genre, r.catalogNo, r.discogsId || '', r.grade, r.quantity])
+    )
+  }
+
+  const playRecord = async (record: VinylRecord) => {
+    if (!user) return
+    // setDoc עם merge:true כדי לא לדרוס שדות אחרים במסמך הפרופיל (כמו role)
+    await setDoc(
+      doc(db, 'users', user.uid),
+      {
+        nowPlaying: {
+          recordId: record.id,
+          title: record.title,
+          artist: record.artist,
+          coverColor: record.coverColor,
+          startedAt: Date.now(),
+        },
+      },
+      { merge: true }
+    )
+  }
+
   return (
     <div>
       <div className="flex items-end justify-between mb-8 flex-wrap gap-4">
@@ -72,12 +100,21 @@ export default function Collection() {
           </p>
           <h2 className="font-display text-4xl">{t.myCollection}</h2>
         </div>
-        <button
-          onClick={() => setShowAdd(true)}
-          className="font-mono text-xs tracking-widest uppercase border border-paper-light/30 rounded-sm px-4 py-2 hover:border-mustard hover:text-mustard transition-colors"
-        >
-          {t.addRecord}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={exportCsv}
+            disabled={records.length === 0}
+            className="font-mono text-xs tracking-widest uppercase border border-paper-light/30 rounded-sm px-4 py-2 hover:border-teal hover:text-teal transition-colors disabled:opacity-30"
+          >
+            ייצוא CSV
+          </button>
+          <button
+            onClick={() => setShowAdd(true)}
+            className="font-mono text-xs tracking-widest uppercase border border-paper-light/30 rounded-sm px-4 py-2 hover:border-mustard hover:text-mustard transition-colors"
+          >
+            {t.addRecord}
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -94,6 +131,7 @@ export default function Collection() {
               record={record}
               onChangeQuantity={changeQuantity}
               onDelete={deleteRecord}
+              onPlay={playRecord}
             />
           ))}
         </div>
@@ -113,10 +151,12 @@ function RecordCard({
   record,
   onChangeQuantity,
   onDelete,
+  onPlay,
 }: {
   record: VinylRecord
   onChangeQuantity: (id: string, quantity: number) => void
   onDelete: (id: string) => void
+  onPlay: (record: VinylRecord) => void
 }) {
   return (
     <div className="rounded-sm overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.5)] hover:-translate-y-1 transition-all duration-200 bg-paper text-ink">
@@ -160,6 +200,13 @@ function RecordCard({
             </button>
           </div>
           <button
+            onClick={() => onPlay(record)}
+            title="סמן כמנגן עכשיו"
+            className="w-6 h-6 flex items-center justify-center text-mustard hover:scale-110 transition-transform"
+          >
+            ▶
+          </button>
+          <button
             onClick={() => onDelete(record.id)}
             className="font-mono text-[10px] uppercase text-rust hover:underline"
           >
@@ -180,6 +227,7 @@ function AddRecordModal({ userId, onClose }: { userId: string; onClose: () => vo
   const [quantity, setQuantity] = useState(1)
   const [saving, setSaving] = useState(false)
   const [discogsId, setDiscogsId] = useState<number | null>(null)
+  const [masterId, setMasterId] = useState<number | null>(null)
   const [thumb, setThumb] = useState<string | null>(null)
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -208,6 +256,7 @@ function AddRecordModal({ userId, onClose }: { userId: string; onClose: () => vo
     setYear(r.year ? String(r.year) : '')
     setGenre(r.genre || '')
     setDiscogsId(r.discogsId)
+    setMasterId(r.masterId)
     setThumb(r.thumb)
     setSearchResults([])
   }
@@ -221,6 +270,7 @@ function AddRecordModal({ userId, onClose }: { userId: string; onClose: () => vo
       // שונה מ-uid המשתמש המחובר, ה-rules יחסמו את זה בשרת.
       await addDoc(collection(db, 'users', userId, 'collection'), {
         discogsId: discogsId || null,
+        masterId: masterId || null,
         title: title.trim(),
         artist: artist.trim(),
         year: year ? parseInt(year, 10) : 0,

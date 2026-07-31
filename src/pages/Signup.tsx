@@ -1,7 +1,7 @@
 import { useState, FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { createUserWithEmailAndPassword, updateProfile, AuthError } from 'firebase/auth'
-import { doc, setDoc } from 'firebase/firestore'
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { auth, db } from '../lib/firebase'
 
 function friendlyAuthError(error: AuthError): string {
@@ -37,8 +37,10 @@ export default function Signup() {
       // firestore.rules חוסמות יצירת משתמש עם role 'admin' ישירות מהלקוח.
       await setDoc(doc(db, 'users', credential.user.uid), {
         displayName: name,
-        email,
+        email: email.trim().toLowerCase(),
         role: 'user',
+        createdAt: serverTimestamp(),
+        lastActiveAt: serverTimestamp(),
       })
 
       navigate('/')

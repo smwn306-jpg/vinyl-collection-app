@@ -1,5 +1,6 @@
 export interface DiscogsResult {
   discogsId: number
+  masterId: number | null
   title: string
   artist: string
   year: number | null
@@ -8,16 +9,39 @@ export interface DiscogsResult {
   thumb: string | null
 }
 
+export interface DiscogsVersion {
+  releaseId: number
+  title: string
+  country: string | null
+  released: string | null
+  format: string | null
+  label: string | null
+  catalogNo: string | null
+  thumb: string | null
+}
+
+export interface DiscogsMaster {
+  masterId: number
+  title: string
+  mainReleaseId: number
+  versionCount: number
+  versions: DiscogsVersion[]
+}
+
 const WORKER_URL = import.meta.env.VITE_DISCOGS_WORKER_URL as string | undefined
 
-export async function searchDiscogs(query: string): Promise<DiscogsResult[]> {
+function requireWorkerUrl() {
   if (!WORKER_URL) {
     throw new Error(
-      'VITE_DISCOGS_WORKER_URL לא מוגדר ב-.env.local. פרסי את ה-Worker (תיקיית worker/) והוסיפי את הכתובת שלו.'
+      'VITE_DISCOGS_WORKER_URL לא מוגדר. פרסי את ה-Worker (תיקיית worker/) והוסיפי את הכתובת שלו.'
     )
   }
+  return WORKER_URL
+}
 
-  const res = await fetch(`${WORKER_URL}/search?q=${encodeURIComponent(query)}`)
+export async function searchDiscogs(query: string): Promise<DiscogsResult[]> {
+  const base = requireWorkerUrl()
+  const res = await fetch(`${base}/search?q=${encodeURIComponent(query)}`)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error(body.error || `חיפוש נכשל (${res.status})`)
@@ -33,6 +57,7 @@ export async function searchDiscogs(query: string): Promise<DiscogsResult[]> {
 
     return {
       discogsId: r.discogsId,
+      masterId: r.masterId,
       title,
       artist,
       year: r.year,
@@ -41,4 +66,14 @@ export async function searchDiscogs(query: string): Promise<DiscogsResult[]> {
       thumb: r.thumb,
     } as DiscogsResult
   })
+}
+
+export async function getMasterVersions(masterId: number | string): Promise<DiscogsMaster> {
+  const base = requireWorkerUrl()
+  const res = await fetch(`${base}/master/${masterId}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.error || `שליפת מהדורות נכשלה (${res.status})`)
+  }
+  return res.json()
 }

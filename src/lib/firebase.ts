@@ -1,6 +1,10 @@
 import { initializeApp } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
-import { getFirestore } from 'firebase/firestore'
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from 'firebase/firestore'
 
 // כל הערכים האלה מגיעים מקובץ .env.local (ראי .env.example).
 // חשוב: המפתחות האלה גלויים ללקוח בכל מקרה (זה נורמלי ב-Firebase client SDK) —
@@ -16,4 +20,14 @@ const firebaseConfig = {
 
 export const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
-export const db = getFirestore(app)
+
+// persistentLocalCache שומר את כל מה שנקרא מ-Firestore ב-IndexedDB המקומי.
+// זה נותן בפועל:
+//  - צפייה באוסף גם ללא אינטרנט (מוצג מהמטמון המקומי)
+//  - הוספה/עריכה בזמן אופליין — הכתיבה נכנסת לתור מקומי ומסתנכרנת אוטומטית
+//    ברגע שהחיבור חוזר, בלי קוד נוסף שצריך לכתוב
+//  - persistentMultipleTabManager כדי שזה יעבוד נכון גם אם האתר פתוח בכמה
+//    טאבים בו-זמנית באותו דפדפן
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+})

@@ -3,9 +3,11 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
+  signOut,
   AuthError,
 } from 'firebase/auth'
-import { auth } from '../lib/firebase'
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { auth, db } from '../lib/firebase'
 
 // מיפוי בסיסי של קודי שגיאה של Firebase להודעות קריאות בעברית.
 // לא חושפים לעולם את הפרטים המדויקים (כמו "user-not-found" מול "wrong-password")
@@ -40,7 +42,14 @@ export default function Login() {
     setError(null)
     setLoading(true)
     try {
-      await signInWithEmailAndPassword(auth, email, password)
+      const credential = await signInWithEmailAndPassword(auth, email, password)
+      const profileSnap = await getDoc(doc(db, 'users', credential.user.uid))
+      if (profileSnap.exists() && profileSnap.data().blocked) {
+        await signOut(auth)
+        setError('החשבון הזה נחסם. פני לתמיכה אם זו טעות.')
+        return
+      }
+      await setDoc(doc(db, 'users', credential.user.uid), { lastActiveAt: serverTimestamp() }, { merge: true })
       navigate('/')
     } catch (err) {
       setError(friendlyAuthError(err as AuthError))

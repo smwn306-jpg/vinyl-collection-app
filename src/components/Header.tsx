@@ -1,8 +1,11 @@
+import { useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { signOut } from 'firebase/auth'
-import { auth } from '../lib/firebase'
+import { doc, onSnapshot, collection, query, where } from 'firebase/firestore'
+import { auth, db } from '../lib/firebase'
 import { useAuth } from '../lib/useAuth'
 import { useLang } from '../lib/i18n'
+import { NowPlaying } from '../types'
 
 const navItem =
   'font-mono text-xs tracking-widest uppercase px-3 py-2 border-b-2 transition-colors'
@@ -11,6 +14,25 @@ export default function Header() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { lang, t, toggle } = useLang()
+  const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  useEffect(() => {
+    if (!user) return
+    const q = query(collection(db, 'messages'), where('receiverId', '==', user.uid), where('read', '==', false))
+    const unsubscribe = onSnapshot(q, (snap) => setUnreadCount(snap.size))
+    return unsubscribe
+  }, [user])
+
+  useEffect(() => {
+    if (!user) return
+    const unsubscribe = onSnapshot(doc(db, 'users', user.uid), (snap) => {
+      setNowPlaying((snap.data()?.nowPlaying as NowPlaying) || null)
+      setIsAdmin(snap.data()?.role === 'admin')
+    })
+    return unsubscribe
+  }, [user])
 
   const handleLogout = async () => {
     await signOut(auth)
@@ -45,6 +67,35 @@ export default function Header() {
           >
             {t.tabWantlist}
           </NavLink>
+          <NavLink
+            to="/sets"
+            className={({ isActive }) =>
+              `${navItem} ${isActive ? 'border-mustard text-mustard' : 'border-transparent text-paper-light/60 hover:text-paper-light'}`
+            }
+          >
+            {t.tabSets}
+          </NavLink>
+          <NavLink
+            to="/messages"
+            className={({ isActive }) =>
+              `${navItem} relative ${isActive ? 'border-mustard text-mustard' : 'border-transparent text-paper-light/60 hover:text-paper-light'}`
+            }
+          >
+            {t.tabMessages}
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-rust" />
+            )}
+          </NavLink>
+          {isAdmin && (
+            <NavLink
+              to="/admin"
+              className={({ isActive }) =>
+                `${navItem} ${isActive ? 'border-mustard text-mustard' : 'border-transparent text-paper-light/60 hover:text-paper-light'}`
+              }
+            >
+              {t.tabAdmin}
+            </NavLink>
+          )}
         </nav>
 
         <div className="flex items-center gap-3">
@@ -74,6 +125,24 @@ export default function Header() {
           </button>
         </div>
       </div>
+
+      {nowPlaying && (
+        <div className="border-t border-paper-light/10 bg-paper-light/5">
+          <div className="max-w-5xl mx-auto px-6 py-2 flex items-center gap-2">
+            <span className="text-mustard text-sm">▶</span>
+            <span className="font-mono text-[11px] tracking-widest text-paper-light/50 uppercase">
+              מנגן עכשיו:
+            </span>
+            <span
+              className="w-2.5 h-2.5 rounded-full shrink-0"
+              style={{ background: nowPlaying.coverColor }}
+            />
+            <span className="font-body text-sm">
+              {nowPlaying.title} <span className="text-paper-light/50">— {nowPlaying.artist}</span>
+            </span>
+          </div>
+        </div>
+      )}
     </header>
   )
 }

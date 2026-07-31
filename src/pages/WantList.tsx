@@ -15,6 +15,7 @@ import { useAuth } from '../lib/useAuth'
 import { WantListItem } from '../types'
 import GhostSleeveCard from '../components/GhostSleeveCard'
 import { useLang } from '../lib/i18n'
+import { downloadCsv } from '../lib/csv'
 
 const PLACEHOLDER_COLORS = ['#A63D2F', '#1F4B43', '#C9A227', '#2B3A55']
 
@@ -47,6 +48,14 @@ export default function WantList() {
     await deleteDoc(doc(db, 'users', user.uid, 'wantlist', id))
   }
 
+  const exportCsv = () => {
+    downloadCsv(
+      'crate-wantlist.csv',
+      ['Artist', 'Album', 'Year', 'Genre', 'Catalog Number'],
+      items.map((i) => [i.artist, i.title, i.year || '', i.genre, i.catalogNo])
+    )
+  }
+
   // "יש לי כבר": מוסיפים לאוסף ומסירים מהחוסרים באותה פעולה אטומית —
   // כך שאין רגע-ביניים שבו הפריט מופיע גם וגם, גם אם החיבור נופל באמצע.
   const acquireItem = async (item: WantListItem) => {
@@ -77,12 +86,21 @@ export default function WantList() {
           <p className="font-mono text-xs text-rust tracking-widest mb-1">{t.missing(items.length)}</p>
           <h2 className="font-display text-4xl">{t.completeCollection}</h2>
         </div>
-        <button
-          onClick={() => setShowAdd(true)}
-          className="font-mono text-xs tracking-widest uppercase border border-paper-light/30 rounded-sm px-4 py-2 hover:border-mustard hover:text-mustard transition-colors"
-        >
-          {t.addToWantlist}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={exportCsv}
+            disabled={items.length === 0}
+            className="font-mono text-xs tracking-widest uppercase border border-paper-light/30 rounded-sm px-4 py-2 hover:border-teal hover:text-teal transition-colors disabled:opacity-30"
+          >
+            ייצוא CSV
+          </button>
+          <button
+            onClick={() => setShowAdd(true)}
+            className="font-mono text-xs tracking-widest uppercase border border-paper-light/30 rounded-sm px-4 py-2 hover:border-mustard hover:text-mustard transition-colors"
+          >
+            {t.addToWantlist}
+          </button>
+        </div>
       </div>
 
       <p className="font-body text-sm text-paper-light/50 mb-8 max-w-xl">

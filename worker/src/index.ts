@@ -4,12 +4,10 @@ export interface Env {
   ALLOWED_ORIGIN: string
 }
 
-// תוצאות חיפוש וגם מהדורות Master Release כמעט לא משתנות — cache ארוך
-// חוסך כמעט את כל הקריאות החוזרות ל-Discogs, ושומר אותנו הרחק
-// ממגבלת ה-60 בקשות/דקה שלהם.
 const CACHE_TTL_SECONDS = 60 * 60 * 24 * 7
-
-const USER_AGENT = 'CrateApp/1.0 (+https://github.com/your-username/vinyl-collection-app)'
+// TODO: תחליפי contact@example.com במייל אמיתי שלך
+const USER_AGENT = 'CrateApp/1.0 (+https://github.com/your-username/vinyl-collection-app; contact@example.com)'
+const RATE_LIMIT_MESSAGE = 'בוצעו יותר מדי חיפושים בזמן קצר. המערכת ממתינה מספר שניות — נסי שוב.'
 
 function corsHeaders(env: Env) {
   return {
@@ -26,6 +24,22 @@ function json(data: unknown, status: number, headers: Record<string, string>) {
   })
 }
 
+// עוטפת כל קריאה ל-Discogs: אם מתקבל 429, ממתינה לפי Retry-After (עד תקרה
+// של 5 שניות), ומנסה עוד פעם אחת בלבד.
+async function fetchDiscogs(url: URL): Promise<Response> {
+  let res = await fetch(url.toString(), { headers: { 'User-Agent': USER_AGENT } })
+
+  if (res.status === 429) {
+    const retryAfterHeader = res.headers.get('Retry-After')
+    const waitSeconds = retryAfterHeader ? parseInt(retryAfterHeader, 10) : 2
+    const waitMs = Math.min(Math.max(waitSeconds, 1) * 1000, 5000)
+    await new Promise((resolve) => setTimeout(resolve, waitMs))
+    res = await fetch(url.toString(), { headers: { 'User-Agent': USER_AGENT } })
+  }
+
+  return res
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
@@ -40,7 +54,7 @@ export default {
     }
 
     // -----------------------------------------------------------------
-    // GET /search?q=...  — חיפוש בקטלוג
+    // GET /search?q=...
     // -----------------------------------------------------------------
     if (url.pathname === '/search') {
       const q = url.searchParams.get('q')?.trim()
@@ -65,9 +79,13 @@ export default {
 
       let discogsRes: Response
       try {
-        discogsRes = await fetch(discogsUrl.toString(), { headers: { 'User-Agent': USER_AGENT } })
+        discogsRes = await fetchDiscogs(discogsUrl)
       } catch {
         return json({ error: 'Failed to reach Discogs' }, 502, headers)
+      }
+
+      if (discogsRes.status === 429) {
+        return json({ error: RATE_LIMIT_MESSAGE }, 429, headers)
       }
       if (!discogsRes.ok) {
         return json({ error: `Discogs API error (${discogsRes.status})` }, discogsRes.status, headers)
@@ -77,7 +95,7 @@ export default {
       const results = (data.results || []).slice(0, 15).map((r: any) => ({
         discogsId: r.id,
         masterId: r.master_id || null,
-        title: r.title as string, // דיסקוגס מחזיר בפורמט "Artist - Album"
+        title: r.title as string,
         year: r.year ? parseInt(r.year, 10) : null,
         genre: (r.genre && r.genre[0]) || null,
         catalogNo: r.catno || null,
@@ -96,7 +114,7 @@ export default {
     }
 
     // -----------------------------------------------------------------
-    // GET /master/:id  — כל המהדורות/גרסאות של אלבום (Master Release)
+    // GET /master/:id
     // -----------------------------------------------------------------
     const masterMatch = url.pathname.match(/^\/master\/(\d+)$/)
     if (masterMatch) {
@@ -123,13 +141,16 @@ export default {
       let masterRes: Response, versionsRes: Response
       try {
         ;[masterRes, versionsRes] = await Promise.all([
-          fetch(masterUrl.toString(), { headers: { 'User-Agent': USER_AGENT } }),
-          fetch(versionsUrl.toString(), { headers: { 'User-Agent': USER_AGENT } }),
+          fetchDiscogs(masterUrl),
+          fetchDiscogs(versionsUrl),
         ])
       } catch {
         return json({ error: 'Failed to reach Discogs' }, 502, headers)
       }
 
+      if (masterRes.status === 429) {
+        return json({ error: RATE_LIMIT_MESSAGE }, 429, headers)
+      }
       if (!masterRes.ok) {
         return json({ error: `Discogs API error (${masterRes.status})` }, masterRes.status, headers)
       }

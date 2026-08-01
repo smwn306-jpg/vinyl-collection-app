@@ -4,7 +4,10 @@
 // =============================================================================
 
 const CACHE_TTL_SECONDS = 60 * 60 * 24 * 7;
-const USER_AGENT = 'CrateApp/1.0 (+https://github.com/your-username/vinyl-collection-app)';
+// TODO: תחליפי contact@example.com במייל אמיתי שלך — Discogs ממליץ על זה
+// כדי שיוכלו ליצור קשר אם יש בעיה, ולפעמים זה מקל על יחס ה-rate limit.
+const USER_AGENT = 'CrateApp/1.0 (+https://github.com/your-username/vinyl-collection-app; contact@example.com)';
+const RATE_LIMIT_MESSAGE = 'בוצעו יותר מדי חיפושים בזמן קצר. המערכת ממתינה מספר שניות — נסי שוב.';
 
 function corsHeaders(env) {
   return {
@@ -19,6 +22,22 @@ function json(data, status, headers) {
     status,
     headers: { ...headers, 'Content-Type': 'application/json' },
   });
+}
+
+// עוטפת כל קריאה ל-Discogs: אם מתקבל 429, ממתינה לפי Retry-After (עד תקרה
+// של 5 שניות כדי לא לתקוע את ה-Worker), ומנסה עוד פעם אחת בלבד.
+async function fetchDiscogs(url) {
+  let res = await fetch(url.toString(), { headers: { 'User-Agent': USER_AGENT } });
+
+  if (res.status === 429) {
+    const retryAfterHeader = res.headers.get('Retry-After');
+    const waitSeconds = retryAfterHeader ? parseInt(retryAfterHeader, 10) : 2;
+    const waitMs = Math.min(Math.max(waitSeconds, 1) * 1000, 5000);
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+    res = await fetch(url.toString(), { headers: { 'User-Agent': USER_AGENT } });
+  }
+
+  return res;
 }
 
 export default {
@@ -60,9 +79,13 @@ export default {
 
       let discogsRes;
       try {
-        discogsRes = await fetch(discogsUrl.toString(), { headers: { 'User-Agent': USER_AGENT } });
+        discogsRes = await fetchDiscogs(discogsUrl);
       } catch (e) {
         return json({ error: 'Failed to reach Discogs' }, 502, headers);
+      }
+
+      if (discogsRes.status === 429) {
+        return json({ error: RATE_LIMIT_MESSAGE }, 429, headers);
       }
       if (!discogsRes.ok) {
         return json({ error: `Discogs API error (${discogsRes.status})` }, discogsRes.status, headers);
@@ -118,13 +141,16 @@ export default {
       let masterRes, versionsRes;
       try {
         [masterRes, versionsRes] = await Promise.all([
-          fetch(masterUrl.toString(), { headers: { 'User-Agent': USER_AGENT } }),
-          fetch(versionsUrl.toString(), { headers: { 'User-Agent': USER_AGENT } }),
+          fetchDiscogs(masterUrl),
+          fetchDiscogs(versionsUrl),
         ]);
       } catch (e) {
         return json({ error: 'Failed to reach Discogs' }, 502, headers);
       }
 
+      if (masterRes.status === 429) {
+        return json({ error: RATE_LIMIT_MESSAGE }, 429, headers);
+      }
       if (!masterRes.ok) {
         return json({ error: `Discogs API error (${masterRes.status})` }, masterRes.status, headers);
       }

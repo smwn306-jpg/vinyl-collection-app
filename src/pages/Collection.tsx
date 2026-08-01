@@ -235,19 +235,40 @@ function AddRecordModal({ userId, onClose }: { userId: string; onClose: () => vo
   const [searching, setSearching] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
 
-  const handleSearch = async (e: FormEvent) => {
-    e.preventDefault()
-    if (!searchQuery.trim()) return
+  const runSearch = async (q: string) => {
     setSearching(true)
     setSearchError(null)
     try {
-      const results = await searchDiscogs(searchQuery.trim())
+      const results = await searchDiscogs(q)
       setSearchResults(results)
     } catch (err) {
       setSearchError(err instanceof Error ? err.message : 'החיפוש נכשל')
     } finally {
       setSearching(false)
     }
+  }
+
+  // חיפוש חי: ממתין 800ms אחרי שהמשתמש מפסיק להקליד, כדי לא לשלוח בקשה
+  // על כל תו (שהיה גורם לחסימות 429 מהר מאוד מול Discogs).
+  useEffect(() => {
+    const trimmed = searchQuery.trim()
+    if (trimmed.length < 2) {
+      setSearchResults([])
+      return
+    }
+    const timeout = setTimeout(() => {
+      runSearch(trimmed)
+    }, 800)
+    return () => clearTimeout(timeout)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery])
+
+  const handleSearch = async (e: FormEvent) => {
+    e.preventDefault()
+    // לחיצה ידנית על "חפש" מריצה מיד, בלי לחכות ל-800ms — נוח למי שרוצה
+    // תוצאה מהירה בלי לחכות להשהיה.
+    if (!searchQuery.trim()) return
+    runSearch(searchQuery.trim())
   }
 
   const pickResult = (r: DiscogsResult) => {

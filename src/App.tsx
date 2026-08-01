@@ -7,6 +7,7 @@ import WantList from './pages/WantList'
 import Sets from './pages/Sets'
 import Messages from './pages/Messages'
 import Admin from './pages/Admin'
+import Settings from './pages/Settings'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
 import { useAuth } from './lib/useAuth'
@@ -57,6 +58,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <Admin />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <Settings />
               </ProtectedRoute>
             }
           />

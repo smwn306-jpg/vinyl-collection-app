@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { signOut } from 'firebase/auth'
-import { doc, onSnapshot, collection, query, where } from 'firebase/firestore'
+import { doc, onSnapshot, collection, query, where, updateDoc } from 'firebase/firestore'
 import { auth, db } from '../lib/firebase'
 import { useAuth } from '../lib/useAuth'
 import { useLang } from '../lib/i18n'
@@ -37,6 +37,11 @@ export default function Header() {
   const handleLogout = async () => {
     await signOut(auth)
     navigate('/login')
+  }
+
+  const stopPlaying = async () => {
+    if (!user) return
+    await updateDoc(doc(db, 'users', user.uid), { nowPlaying: null })
   }
 
   return (
@@ -153,9 +158,16 @@ export default function Header() {
               className="w-2.5 h-2.5 rounded-full shrink-0"
               style={{ background: nowPlaying.coverColor }}
             />
-            <span className="font-body text-sm">
+            <span className="font-body text-sm flex-1">
               {nowPlaying.title} <span className="text-paper-light/50">— {nowPlaying.artist}</span>
             </span>
+            <button
+              onClick={stopPlaying}
+              title="עצירה"
+              className="text-paper-light/40 hover:text-rust text-sm shrink-0"
+            >
+              ✕
+            </button>
           </div>
         </div>
       )}

@@ -19,6 +19,7 @@ import VinylArt from '../components/VinylArt'
 import { GRADE_COLORS } from '../lib/grades'
 import { useLang } from '../lib/i18n'
 import { downloadCsv } from '../lib/csv'
+import { syncDuplicateIndex, recordKey, MARKETPLACES } from '../lib/duplicatesIndex'
 
 const GRADES: Grade[] = ['M', 'NM', 'VG+', 'VG', 'G', 'F']
 const PLACEHOLDER_COLORS = ['#A63D2F', '#1F4B43', '#C9A227', '#2B3A55']
@@ -54,15 +55,42 @@ export default function Collection() {
 
   const changeQuantity = async (id: string, quantity: number) => {
     if (!user) return
+    const newQuantity = Math.max(1, quantity)
     await updateDoc(doc(db, 'users', user.uid, 'collection', id), {
-      quantity: Math.max(1, quantity),
+      quantity: newQuantity,
     })
+    const record = records.find((r) => r.id === id)
+    if (record) {
+      await syncDuplicateIndex(
+        { ...record, quantity: newQuantity },
+        user.uid,
+        user.displayName || user.email || 'אספן'
+      )
+    }
+  }
+
+  const setTradeOption = async (id: string, tradeType: 'sell' | 'trade' | null, price?: number) => {
+    if (!user) return
+    await updateDoc(doc(db, 'users', user.uid, 'collection', id), {
+      tradeType,
+      price: price ?? null,
+    })
+    const record = records.find((r) => r.id === id)
+    if (record) {
+      await syncDuplicateIndex({ ...record, tradeType, price }, user.uid, user.displayName || user.email || 'אספן')
+    }
   }
 
   const deleteRecord = async (id: string) => {
     if (!user) return
     if (!confirm('למחוק את התקליט הזה מהאוסף?')) return
+    const record = records.find((r) => r.id === id)
     await deleteDoc(doc(db, 'users', user.uid, 'collection', id))
+    if (record) {
+      await deleteDoc(doc(db, 'duplicatesIndex', recordKey(record.title, record.artist), 'holders', user.uid)).catch(
+        () => {}
+      )
+    }
   }
 
   const exportCsv = () => {
@@ -132,6 +160,7 @@ export default function Collection() {
               onChangeQuantity={changeQuantity}
               onDelete={deleteRecord}
               onPlay={playRecord}
+              onSetTradeOption={setTradeOption}
             />
           ))}
         </div>
@@ -152,12 +181,17 @@ function RecordCard({
   onChangeQuantity,
   onDelete,
   onPlay,
+  onSetTradeOption,
 }: {
   record: VinylRecord
   onChangeQuantity: (id: string, quantity: number) => void
   onDelete: (id: string) => void
   onPlay: (record: VinylRecord) => void
+  onSetTradeOption: (id: string, tradeType: 'sell' | 'trade' | null, price?: number) => void
 }) {
+  const [priceInput, setPriceInput] = useState(record.price ? String(record.price) : '')
+  const isDuplicate = record.quantity > 1
+
   return (
     <div className="rounded-sm overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.5)] hover:-translate-y-1 transition-all duration-200 bg-paper text-ink">
       <VinylArt color={record.coverColor} />
@@ -213,6 +247,65 @@ function RecordCard({
             מחיקה
           </button>
         </div>
+
+        {isDuplicate && (
+          <div className="mt-3 pt-3 border-t border-ink/10">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-ink/50 mb-2">
+              {record.quantity} עותקים — יש עותק נוסף
+            </p>
+            <div className="grid grid-cols-2 gap-1.5 mb-2">
+              <button
+                onClick={() => onSetTradeOption(record.id, record.tradeType === 'sell' ? null : 'sell', Number(priceInput) || undefined)}
+                className="font-mono text-[10px] uppercase rounded py-1.5 transition-colors"
+                style={
+                  record.tradeType === 'sell'
+                    ? { background: '#C9A227', color: '#15181C' }
+                    : { border: '1px solid rgba(21,24,28,0.2)' }
+                }
+              >
+                למכירה
+              </button>
+              <button
+                onClick={() => onSetTradeOption(record.id, record.tradeType === 'trade' ? null : 'trade')}
+                className="font-mono text-[10px] uppercase rounded py-1.5 transition-colors"
+                style={
+                  record.tradeType === 'trade'
+                    ? { background: '#20554B', color: '#F1EAD9' }
+                    : { border: '1px solid rgba(21,24,28,0.2)' }
+                }
+              >
+                להחלפה
+              </button>
+            </div>
+
+            {record.tradeType === 'sell' && (
+              <input
+                type="number"
+                value={priceInput}
+                onChange={(e) => setPriceInput(e.target.value)}
+                onBlur={() => onSetTradeOption(record.id, 'sell', Number(priceInput) || undefined)}
+                placeholder="מחיר מבוקש (₪)"
+                className="w-full border border-ink/15 rounded px-2 py-1.5 text-xs bg-white/50 outline-none focus:border-mustard mb-2"
+              />
+            )}
+
+            {record.tradeType && (
+              <div className="grid grid-cols-3 gap-1.5">
+                {MARKETPLACES.map((m) => (
+                  <a
+                    key={m.id}
+                    href={m.buildUrl(`${record.title} ${record.artist}`)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-center font-mono text-[10px] rounded py-1.5 border border-mustard/50 text-mustard hover:bg-mustard/10 transition-colors"
+                  >
+                    {m.label}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

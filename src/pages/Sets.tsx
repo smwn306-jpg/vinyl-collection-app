@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { collection, onSnapshot, query, orderBy, doc, updateDoc } from 'firebase/firestore'
+import { collection, onSnapshot, query, orderBy, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { useAuth } from '../lib/useAuth'
 import { VinylRecord } from '../types'
@@ -35,6 +35,27 @@ export default function Sets() {
         format: version.format,
         released: version.released,
       },
+    })
+  }
+
+  const addVersionToWantlist = async (
+    record: VinylRecord,
+    version: DiscogsMaster['versions'][number]
+  ) => {
+    if (!user) return
+    await addDoc(collection(db, 'users', user.uid, 'wantlist'), {
+      title: record.title,
+      artist: record.artist,
+      year: version.released ? parseInt(version.released, 10) || 0 : 0,
+      genre: record.genre,
+      catalogNo: version.catalogNo || '—',
+      coverColor: record.coverColor,
+      lowestPrice: 0,
+      currency: '₪',
+      listingCount: 0,
+      source: 'Discogs Marketplace',
+      ownerId: user.uid,
+      createdAt: serverTimestamp(),
     })
   }
 
@@ -86,7 +107,12 @@ export default function Sets() {
       )}
 
       {openRecord && (
-        <VersionsModal record={openRecord} onClose={() => setOpenRecord(null)} onSelectEdition={setEdition} />
+        <VersionsModal
+          record={openRecord}
+          onClose={() => setOpenRecord(null)}
+          onSelectEdition={setEdition}
+          onAddToWantlist={addVersionToWantlist}
+        />
       )}
     </div>
   )
@@ -96,15 +122,18 @@ function VersionsModal({
   record,
   onClose,
   onSelectEdition,
+  onAddToWantlist,
 }: {
   record: VinylRecord
   onClose: () => void
   onSelectEdition: (record: VinylRecord, version: DiscogsMaster['versions'][number]) => void
+  onAddToWantlist: (record: VinylRecord, version: DiscogsMaster['versions'][number]) => Promise<void>
 }) {
   const [master, setMaster] = useState<DiscogsMaster | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [savedReleaseId, setSavedReleaseId] = useState<number | null>(record.edition?.releaseId || null)
+  const [addedReleaseIds, setAddedReleaseIds] = useState<Set<number>>(new Set())
 
   useEffect(() => {
     if (!record.masterId) return
@@ -178,6 +207,19 @@ function VersionsModal({
                     >
                       {isSaved ? '✓ שלי' : 'זו שלי'}
                     </button>
+                    {!isSaved && (
+                      <button
+                        onClick={async () => {
+                          await onAddToWantlist(record, v)
+                          setAddedReleaseIds((prev) => new Set(prev).add(v.releaseId))
+                        }}
+                        disabled={addedReleaseIds.has(v.releaseId)}
+                        className="font-mono text-[10px] tracking-widest uppercase px-2.5 py-1.5 rounded shrink-0 transition-colors disabled:opacity-40"
+                        style={{ border: '1px solid rgba(176,67,47,0.5)', color: '#B0432F' }}
+                      >
+                        {addedReleaseIds.has(v.releaseId) ? '✓ נוסף' : '+ לחוסרים'}
+                      </button>
+                    )}
                   </div>
                 )
               })}

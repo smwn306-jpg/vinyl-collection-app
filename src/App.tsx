@@ -8,12 +8,15 @@ import Sets from './pages/Sets'
 import Messages from './pages/Messages'
 import Admin from './pages/Admin'
 import Settings from './pages/Settings'
+import Feedback from './pages/Feedback'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
 import { useAuth } from './lib/useAuth'
+import { useIncomingMessageNotifications } from './lib/useIncomingMessageNotifications'
 
 export default function App() {
   const { user } = useAuth()
+  useIncomingMessageNotifications(user?.uid)
 
   return (
     <div className="min-h-screen">
@@ -66,6 +69,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <Settings />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/feedback"
+            element={
+              <ProtectedRoute>
+                <Feedback />
               </ProtectedRoute>
             }
           />

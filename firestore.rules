@@ -127,6 +127,49 @@ service cloud.firestore {
     }
 
     // ---------------------------------------------------------------------
+    // supportMessages/{messageId} — פניות תמיכה מהמשתמשים
+    // כל משתמש רואה/יוצר רק את הפניות שלו; אדמין רואה ומעדכן סטטוס לכולן.
+    // userId ו-userEmail נגזרים מה-auth של השולח, לא מהקלט שלו — כדי שלא
+    // אפשר יהיה "לשלוח פנייה בשם מישהו אחר".
+    // ---------------------------------------------------------------------
+    match /supportMessages/{messageId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() < 2000
+        && request.resource.data.status == 'open';
+      // רק אדמין יכול לשנות (למשל לסמן "טופל"), ורק את שדה ה-status
+      allow update: if isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+      allow delete: if false;
+    }
+
+    // ---------------------------------------------------------------------
+    // suggestions/{suggestionId} — לוח הצעות לשיפור, פתוח לכל המשתמשים
+    // ---------------------------------------------------------------------
+    match /suggestions/{suggestionId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() < 150
+        && request.resource.data.description.size() < 2000;
+      // אין עריכה ישירה של רעיון אחרי יצירתו — רק מחיקה (על ידי המחבר או אדמין)
+      allow update: if false;
+      allow delete: if isSignedIn() && (resource.data.authorId == request.auth.uid || isAdmin());
+
+      // הצבעה: קיום מסמך = הצבעה. ה-ID של המסמך הוא ה-uid של המצביע עצמו,
+      // כך שכל משתמש יכול ליצור/למחוק רק את ההצבעה שלו — לא של אחרים.
+      match /votes/{voterId} {
+        allow read: if isSignedIn();
+        allow create, delete: if isOwner(voterId);
+        allow update: if false;
+      }
+    }
+
+    // ---------------------------------------------------------------------
     // ברירת מחדל: כל מה שלא הוגדר במפורש למעלה — חסום.
     // ---------------------------------------------------------------------
     match /{document=**} {

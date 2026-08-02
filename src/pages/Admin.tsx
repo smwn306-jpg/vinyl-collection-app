@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react'
 import {
   collection,
-  collectionGroup,
   getCountFromServer,
   getDocs,
   doc,
   updateDoc,
   onSnapshot,
+  orderBy,
+  query,
 } from 'firebase/firestore'
-import { db } from '../lib/firebase'
+import { sendPasswordResetEmail } from 'firebase/auth'
+import { auth, db } from '../lib/firebase'
 import { useAuth } from '../lib/useAuth'
-import { UserProfile } from '../types'
+import { UserProfile, SupportMessage } from '../types'
 
 export default function Admin() {
   const { user } = useAuth()
@@ -18,9 +20,11 @@ export default function Admin() {
   const [checkingRole, setCheckingRole] = useState(true)
 
   const [totalUsers, setTotalUsers] = useState<number | null>(null)
-  const [totalRecords, setTotalRecords] = useState<number | null>(null)
   const [users, setUsers] = useState<(UserProfile & { recordCount: number | null })[]>([])
   const [loadingUsers, setLoadingUsers] = useState(true)
+  const [resetSentFor, setResetSentFor] = useState<string | null>(null)
+
+  const [supportMessages, setSupportMessages] = useState<SupportMessage[]>([])
 
   // בדיקת הרשאה: לא מספיק להסתיר את הטאב — צריך לוודא שגם מי שמקליד /admin
   // ידנית בכתובת לא רואה כלום אם הוא לא אדמין. ה-Firestore rules חוסמות את
@@ -37,26 +41,45 @@ export default function Admin() {
   useEffect(() => {
     if (myProfile?.role !== 'admin') return
 
-    getCountFromServer(collection(db, 'users')).then((snap) => setTotalUsers(snap.data().count))
-    getCountFromServer(collectionGroup(db, 'collection')).then((snap) =>
-      setTotalRecords(snap.data().count)
-    )
+    getCountFromServer(collection(db, 'users'))
+      .then((snap) => setTotalUsers(snap.data().count))
+      .catch((err) => console.error('Failed to count users:', err))
 
-    getDocs(collection(db, 'users')).then(async (snap) => {
-      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as UserProfile)
-      setUsers(list.map((u) => ({ ...u, recordCount: null })))
-      setLoadingUsers(false)
+    getDocs(collection(db, 'users'))
+      .then(async (snap) => {
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as UserProfile)
+        setUsers(list.map((u) => ({ ...u, recordCount: null })))
+        setLoadingUsers(false)
 
-      // כמות תקליטים לכל משתמש נשלפת בנפרד ומתמלאת בהדרגה, כדי לא לחסום
-      // את הצגת הטבלה עד שכל ה-N שאילתות חוזרות.
-      list.forEach(async (u) => {
-        const countSnap = await getCountFromServer(collection(db, 'users', u.id, 'collection'))
-        setUsers((prev) =>
-          prev.map((p) => (p.id === u.id ? { ...p, recordCount: countSnap.data().count } : p))
-        )
+        // כמות תקליטים לכל משתמש נשלפת בנפרד ומתמלאת בהדרגה. "תקליטים
+        // במערכת (כולם)" למטה הוא סכום השדה הזה — לא שאילתה נפרדת חוצת-
+        // משתמשים (collectionGroup), כי זו נכשלה בשקט; כך זה תמיד מדויק
+        // ולא תקוע על "—".
+        list.forEach(async (u) => {
+          try {
+            const countSnap = await getCountFromServer(collection(db, 'users', u.id, 'collection'))
+            setUsers((prev) =>
+              prev.map((p) => (p.id === u.id ? { ...p, recordCount: countSnap.data().count } : p))
+            )
+          } catch (err) {
+            console.error(`Failed to count records for ${u.id}:`, err)
+            setUsers((prev) => prev.map((p) => (p.id === u.id ? { ...p, recordCount: 0 } : p)))
+          }
+        })
       })
+      .catch((err) => {
+        console.error('Failed to load users:', err)
+        setLoadingUsers(false)
+      })
+
+    const q = query(collection(db, 'supportMessages'), orderBy('createdAt', 'desc'))
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setSupportMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as SupportMessage))
     })
+    return unsubscribe
   }, [myProfile])
+
+  const totalRecords = users.reduce((sum, u) => sum + (u.recordCount || 0), 0)
 
   const toggleRole = async (u: UserProfile) => {
     await updateDoc(doc(db, 'users', u.id), { role: u.role === 'admin' ? 'user' : 'admin' })
@@ -64,6 +87,21 @@ export default function Admin() {
 
   const toggleBlocked = async (u: UserProfile) => {
     await updateDoc(doc(db, 'users', u.id), { blocked: !u.blocked })
+  }
+
+  // Firebase Web SDK לא מאפשר לאף אחד (גם לא אדמין) לשנות ישירות את הסיסמה
+  // של משתמש אחר — זה בכוונה, מטעמי אבטחה (אחרת גישה לחשבון האדמין = גישה
+  // לכל חשבון). הדרך הנכונה והמאובטחת: לשלוח למשתמש מייל איפוס סיסמה
+  // רשמי מ-Firebase, בדיוק כמו "שכחתי סיסמה" — לא דורש Cloud Functions
+  // ונשאר בתוכנית החינמית.
+  const sendReset = async (u: UserProfile) => {
+    await sendPasswordResetEmail(auth, u.email)
+    setResetSentFor(u.id)
+    setTimeout(() => setResetSentFor(null), 4000)
+  }
+
+  const markSupportResolved = async (msg: SupportMessage) => {
+    await updateDoc(doc(db, 'supportMessages', msg.id), { status: 'resolved' })
   }
 
   if (checkingRole) {
@@ -94,7 +132,7 @@ export default function Admin() {
           <p className="font-mono text-[10px] tracking-widest text-paper-light/40 uppercase mb-1">
             תקליטים במערכת (כולם)
           </p>
-          <p className="font-display text-3xl">{totalRecords ?? '—'}</p>
+          <p className="font-display text-3xl">{loadingUsers ? '—' : totalRecords}</p>
         </div>
       </div>
 
@@ -105,8 +143,8 @@ export default function Admin() {
       {loadingUsers ? (
         <p className="font-mono text-xs text-paper-light/40 tracking-widest">טוען...</p>
       ) : (
-        <div className="overflow-x-auto rounded-sm border border-paper-light/10">
-          <table className="w-full text-sm min-w-[560px]">
+        <div className="overflow-x-auto rounded-sm border border-paper-light/10 mb-10">
+          <table className="w-full text-sm min-w-[680px]">
             <thead>
               <tr className="text-right font-mono text-[10px] tracking-widest text-paper-light/40 uppercase">
                 <th className="px-4 py-3">שם</th>
@@ -142,7 +180,7 @@ export default function Admin() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <button
                         onClick={() => toggleRole(u)}
                         disabled={u.id === myProfile.id}
@@ -157,12 +195,49 @@ export default function Admin() {
                       >
                         {u.blocked ? 'שחרר' : 'חסום'}
                       </button>
+                      <button
+                        onClick={() => sendReset(u)}
+                        className="font-mono text-[10px] uppercase text-mustard hover:underline"
+                      >
+                        {resetSentFor === u.id ? '✓ נשלח' : 'איפוס סיסמה'}
+                      </button>
                     </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      <p className="font-mono text-[10px] tracking-widest text-paper-light/40 uppercase mb-3">
+        פניות תמיכה
+      </p>
+      {supportMessages.length === 0 ? (
+        <p className="font-body text-sm text-paper-light/50">אין פניות תמיכה.</p>
+      ) : (
+        <div className="space-y-2">
+          {supportMessages.map((msg) => (
+            <div
+              key={msg.id}
+              className="rounded-sm border border-paper-light/10 p-3 flex items-start justify-between gap-4"
+            >
+              <div className="min-w-0">
+                <p className="font-mono text-[10px] text-paper-light/40">{msg.userEmail}</p>
+                <p className="font-body text-sm mt-1">{msg.message}</p>
+              </div>
+              {msg.status === 'resolved' ? (
+                <span className="font-mono text-[10px] text-teal shrink-0">✓ טופל</span>
+              ) : (
+                <button
+                  onClick={() => markSupportResolved(msg)}
+                  className="font-mono text-[10px] uppercase text-teal hover:underline shrink-0"
+                >
+                  סמן כטופל
+                </button>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>

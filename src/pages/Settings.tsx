@@ -9,6 +9,11 @@ import {
 import { doc, updateDoc } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { useAuth } from '../lib/useAuth'
+import {
+  isNotificationSupported,
+  getNotificationPermission,
+  requestNotificationPermission,
+} from '../lib/notifications'
 
 function friendlyAuthError(error: AuthError): string {
   switch (error.code) {
@@ -26,6 +31,7 @@ function friendlyAuthError(error: AuthError): string {
 
 export default function Settings() {
   const { user } = useAuth()
+  const [notifPermission, setNotifPermission] = useState(getNotificationPermission())
 
   const [displayName, setDisplayName] = useState(user?.displayName || '')
   const [nameSaved, setNameSaved] = useState(false)
@@ -79,6 +85,11 @@ export default function Settings() {
     }
   }
 
+  const handleEnableNotifications = async () => {
+    const result = await requestNotificationPermission()
+    setNotifPermission(result)
+  }
+
   return (
     <div className="max-w-md">
       <p className="font-mono text-xs text-mustard tracking-widest mb-1">החשבון שלי</p>
@@ -89,6 +100,28 @@ export default function Settings() {
           אימייל
         </p>
         <p className="font-body text-sm text-paper-light/70">{user.email}</p>
+      </div>
+
+      <div className="mb-10 pb-10 border-b border-paper-light/10">
+        <p className="font-mono text-[10px] tracking-widest text-paper-light/40 uppercase mb-2">
+          התראות דפדפן
+        </p>
+        {!isNotificationSupported() ? (
+          <p className="font-body text-sm text-paper-light/50">הדפדפן הזה לא תומך בהתראות.</p>
+        ) : notifPermission === 'granted' ? (
+          <p className="font-body text-sm text-teal">✓ התראות מופעלות — תקבלי פינג על הודעה חדשה</p>
+        ) : notifPermission === 'denied' ? (
+          <p className="font-body text-sm text-rust">
+            ההתראות חסומות בהגדרות הדפדפן. צריך לאפשר אותן ידנית דרך הגדרות האתר בדפדפן.
+          </p>
+        ) : (
+          <button
+            onClick={handleEnableNotifications}
+            className="font-mono text-xs tracking-widest uppercase border border-paper-light/30 rounded-sm px-4 py-2 hover:border-mustard hover:text-mustard transition-colors"
+          >
+            הפעלת התראות
+          </button>
+        )}
       </div>
 
       <form onSubmit={handleNameSave} className="space-y-3 mb-10 pb-10 border-b border-paper-light/10">

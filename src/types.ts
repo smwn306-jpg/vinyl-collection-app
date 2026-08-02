@@ -78,3 +78,21 @@ export interface UserProfile {
   createdAt?: Timestamp | null
   lastActiveAt?: Timestamp | null
 }
+
+export interface SupportMessage {
+  id: string
+  userId: string
+  userEmail: string
+  message: string
+  status: 'open' | 'resolved'
+  createdAt: Timestamp | null
+}
+
+export interface Suggestion {
+  id: string
+  authorId: string
+  authorName: string
+  title: string
+  description: string
+  createdAt: Timestamp | null
+}

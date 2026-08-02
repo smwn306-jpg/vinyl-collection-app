@@ -104,6 +104,14 @@ export default function Header() {
           >
             {t.tabSettings}
           </NavLink>
+          <NavLink
+            to="/feedback"
+            className={({ isActive }) =>
+              `${navItem} ${isActive ? 'border-mustard text-mustard' : 'border-transparent text-paper-light/60 hover:text-paper-light'}`
+            }
+          >
+            {t.tabFeedback}
+          </NavLink>
         </nav>
 
         <div className="flex items-center gap-3">
